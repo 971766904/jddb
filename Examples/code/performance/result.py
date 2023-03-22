@@ -31,7 +31,7 @@ class Result:
         self.y_pred = []
         self.y_true = []
         self.shot_no = []
-        self.ignore_thresholds = False
+        self.ignore_thresholds = True
         if os.path.exists(csv_path):
             self.read()
         else:
@@ -321,7 +321,7 @@ class Result:
 
         if len(set(self.get_all_shots(include_no_truth=False)) & set(self.shot_no)) != len(self.shot_no):
             self.get_y()
-        [[tn, fp], [fn, tp]] = confusion_matrix(self.y_true, self.y_pred, labels=[1, 0])
+        [[tn, fp], [fn, tp]] = confusion_matrix(self.y_true, self.y_pred)
         return tp, fn, fp, tn
 
     def ture_positive_rate(self):

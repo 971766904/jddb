@@ -71,9 +71,8 @@ if __name__ == '__main__':
 
     # save sample result to a FileRepo, so when predicting shot with differnet trgging logic,
     # you don't have to re-infor the testshot
-    df_result = pd.DataFrame(columns=['shot_no', 'predicted_disruption', 'predicted_disruption_time', 'true_disruption',
-                                      'true_disruption_time', 'warning_time', 'true_positive', 'false_positive',
-                                      'tardy_alarm_threshold', 'lucky_guess_threshold'])
+    performance_test = Result(r'..\test\test_result.xlsx')
+    sample_result = dict()
     for i in range(shot_info.shape[0]):
         va_shot = shot_info[i, 0]
         if shot_info[i, 1]:
@@ -81,6 +80,9 @@ if __name__ == '__main__':
         dis = df_val[df_val['#'] == va_shot]
         X = dis.drop(['disrup_tag', '#', 'time', 'endtime'], axis=1).values
         y_pred = gbm.predict(X, num_iteration=gbm.best_iteration)
+        sample_result.setdefault(va_shot, []).append(y_pred)
+
+        # using the sample reulst to predict disruption on shot, and save result to result file using result module.
         binary_result = 1 * (y_pred >= 0.5)
         for k in range(len(binary_result) - 2):
             if binary_result[k] + binary_result[k + 1] + binary_result[k + 2] == 3:
@@ -96,32 +98,44 @@ if __name__ == '__main__':
             true_disruption_time = shot_info[i, 2] / 1000
         else:
             true_disruption_time = -1
-        index = len(df_result)
-        df_result.loc[index, ['shot_no', 'predicted_disruption', 'predicted_disruption_time', 'true_disruption',
-                              'true_disruption_time']] = [shot_no, predicted_disruption, predicted_disruption_time,
-                                                          true_disruption, true_disruption_time]
-
-    df_result.to_excel(r'..\test\test_result.xlsx', index=False)
-
-    # using the sample reulst to predict disruption on shot, and save result to result file using result module.
-    performance_test = Result(r'..\test\test_result.xlsx')
-    performance_test.lucky_guess_threshold=.1
-    performance_test.tardy_alarm_threshold=.005
+        index = len(performance_test.result)
+        performance_test.result.loc[
+            i, ['shot_no', 'predicted_disruption', 'predicted_disruption_time', 'true_disruption',
+                    'true_disruption_time']] = [shot_no, predicted_disruption, predicted_disruption_time,
+                                                true_disruption, true_disruption_time]
+    performance_test.lucky_guess_threshold = .1
+    performance_test.tardy_alarm_threshold = .005
     performance_test.calc_metrics()
-    print(performance_test.get_precision())
-    performance_test.warning_time_histogram('../test/',5)
+    # print(performance_test.get_precision())
+    # performance_test.warning_time_histogram('../test/', 5)
     # performance_test.accumulate_warning_time_plot('../test/', tp+fp)
     performance_test.save()
 
     # simply chage different disruptivity triggering level and logic, get many result.
     test_report = Report('../test/report.xlsx')
     test_report.report_file()
-    for i in range(10,200,10):
-
+    level = np.linspace(0, 1, 50)
+    level = np.sort(np.append(level, [0.98, 0.983, 0.987, 0.99, 0.995]))
+    for i in level:
     # %% evaluation
+        for j in range(shot_info.shape[0]):
+            va_shot = shot_info[j, 0]
+            y_pred = sample_result[va_shot][0]
+            binary_result = 1 * (y_pred >= i)
+            for k in range(len(binary_result) - 2):
+                if binary_result[k] + binary_result[k + 1] + binary_result[k + 2] == 3:
+                    predicted_disruption_time = (k + 2) / 1000
+                    predicted_disruption = 1
+                    break
+                else:
+                    predicted_disruption_time = -1
+                    predicted_disruption = 0
+            performance_test.result.loc[
+                performance_test.result[performance_test.result.shot_no == va_shot].index, ['predicted_disruption',
+                'predicted_disruption_time']] = [predicted_disruption, predicted_disruption_time]
 
     # add result to the report
-        test_report.add(performance_test, str(i), .005, i*.001)
+        test_report.add(performance_test, str(i), .005,  .1)
 
     # find best result
 
